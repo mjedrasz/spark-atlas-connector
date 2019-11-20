@@ -63,6 +63,20 @@ trait AtlasEntityUtils extends Logging {
     }
   }
 
+
+  def partitionToEntity(
+                     tableDefinition: CatalogTable,
+                     mockDbDefinition: Option[CatalogDatabase] = None,
+                     partitionKey: String,
+                     partitionVal: String): SACAtlasReferenceable = {
+    if (SparkUtils.usingRemoteMetastoreService()) {
+      external.hivePartitionToReference(tableDefinition,
+        clusterName, Array(partitionVal))
+    } else {
+      internal.sparkPartitionToEntity(tableDefinition, clusterName, Array(partitionVal), mockDbDefinition)
+    }
+  }
+
   def sparkTableToEntity(
       tableDefinition: CatalogTable,
       mockDbDefinition: Option[CatalogDatabase] = None): SACAtlasReferenceable = {

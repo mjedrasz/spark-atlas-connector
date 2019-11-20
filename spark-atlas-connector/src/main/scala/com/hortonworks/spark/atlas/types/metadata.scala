@@ -22,6 +22,7 @@ object metadata {
   val DB_TYPE_STRING = "spark_db"
   val STORAGEDESC_TYPE_STRING = "spark_storagedesc"
   val TABLE_TYPE_STRING = "spark_table"
+  val TABLE_PARTITION_TYPE_STRING = "spark_table_partition"
   val PROCESS_TYPE_STRING = "spark_process"
   val ML_DIRECTORY_TYPE_STRING = "spark_ml_directory"
   val ML_PIPELINE_TYPE_STRING = "spark_ml_pipeline"

@@ -78,6 +78,32 @@ object internal extends Logging {
   def sparkTableUniqueAttribute(db: String, table: String): String = {
     SparkUtils.getUniqueQualifiedPrefix() + s"$db.$table"
   }
+  def sparkPartitionUniqueAttribute(db: String, table: String,
+                                    partValues: Array[String]): String = {
+    SparkUtils.getUniqueQualifiedPrefix() + s"$db.$table.${partValues.mkString(",")}"
+  }
+
+  def sparkPartitionToEntity(tblDefinition: CatalogTable, clusterName: String,
+                             partitionValues: Array[String],
+                             mockDbDefinition: Option[CatalogDatabase] = None)
+  : SACAtlasEntityWithDependencies = {
+
+    val tableDefinition = SparkUtils.getCatalogTableIfExistent(tblDefinition)
+    val db = SparkUtils.getDatabaseName(tableDefinition)
+    val table = SparkUtils.getTableName(tableDefinition)
+    val dbDefinition = mockDbDefinition
+      .getOrElse(SparkUtils.getExternalCatalog().getDatabase(db))
+
+    val tableEntity = sparkTableToEntity(tableDefinition, clusterName, Some(dbDefinition))
+
+    val partEntity = new AtlasEntity(metadata.TABLE_PARTITION_TYPE_STRING)
+    partEntity.setAttribute("qualifiedName",
+      sparkPartitionUniqueAttribute(db, table, partitionValues))
+    partEntity.setAttribute("name", partitionValues.mkString(","))
+    partEntity.setRelationshipAttribute("table", tableEntity.asObjectId)
+
+    new SACAtlasEntityWithDependencies(partEntity, Seq(tableEntity))
+  }
 
   def sparkTableToEntity(
       tblDefinition: CatalogTable,
@@ -119,6 +145,9 @@ object internal extends Logging {
 
     new SACAtlasEntityWithDependencies(tblEntity, Seq(dbEntity, sdEntity))
   }
+
+
+
 
   def sparkTableToEntityForAlterTable(
       tblDefinition: CatalogTable,

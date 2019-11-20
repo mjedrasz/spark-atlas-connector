@@ -230,6 +230,8 @@ object external {
   // ================== Hive Catalog entities =====================
   val HIVE_TABLE_TYPE_STRING = "hive_table"
 
+  val HIVE_TABLE_PARTITION_TYPE_STRING = "hive_table_partition"
+
   // scalastyle:off
   /**
    * This is based on the logic how Hive Hook defines qualifiedName for Hive DB (borrowed from Apache Atlas v1.1).
@@ -244,6 +246,15 @@ object external {
       db: String,
       table: String): String = {
     s"${db.toLowerCase}.${table.toLowerCase}@$cluster"
+  }
+
+  def hivePartitionUniqueAttribute(
+     cluster: String,
+     db: String,
+     table: String,
+     partitionValues: Array[String]): String = {
+    s"${db.toLowerCase}.${table.toLowerCase}.${partitionValues.mkString(",")}@$cluster"
+
   }
 
   def hiveTableToReference(
@@ -264,4 +275,19 @@ object external {
     SACAtlasEntityReference(
       new AtlasObjectId(HIVE_TABLE_TYPE_STRING, "qualifiedName", qualifiedName))
   }
+
+
+  def hivePartitionToReference(
+                            tblDefinition: CatalogTable,
+                            cluster: String,
+                            partitionValues: Array[String]): SACAtlasReferenceable = {
+    val tableDefinition = SparkUtils.getCatalogTableIfExistent(tblDefinition)
+    val db = SparkUtils.getDatabaseName(tableDefinition)
+    val table = SparkUtils.getTableName(tableDefinition)
+    val qualifiedName = hivePartitionUniqueAttribute(cluster, db, table, partitionValues)
+    SACAtlasEntityReference(
+      new AtlasObjectId(HIVE_TABLE_PARTITION_TYPE_STRING, "qualifiedName", qualifiedName))
+  }
+
+
 }

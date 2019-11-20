@@ -24,7 +24,7 @@ import org.apache.spark.sql.execution.UnionExec
 import org.apache.spark.sql.hive.execution.InsertIntoHiveTable
 import com.hortonworks.spark.atlas.{WithHiveSupport, WithRemoteHiveMetastoreServiceSupport}
 import com.hortonworks.spark.atlas.sql.testhelper.{BaseHarvesterSuite, ProcessEntityValidator, TableEntityValidator}
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{SaveMode, SparkSession}
 
 abstract class BaseInsertIntoHarvesterSuite
   extends BaseHarvesterSuite {
@@ -52,6 +52,13 @@ abstract class BaseInsertIntoHarvesterSuite
     _spark.sql(s"INSERT INTO TABLE $sourceSparkTblName VALUES ('d'), ('e'), ('f')")
 
     _spark.sql(s"CREATE TABLE $destinationHiveTblName (name string)")
+    /* Partitioned version of a hive table */
+    _spark.sql(
+      s"""CREATE TABLE
+         |${destinationHiveTblName}_part (name string)
+         |PARTITIONED BY (dt STRING)"""
+        .stripMargin)
+
     _spark.sql(s"CREATE TABLE $destinationSparkTblName (name string) USING ORC")
 
     // tables used in cases of multiple source/destination tables
@@ -72,7 +79,41 @@ abstract class BaseInsertIntoHarvesterSuite
     cleanupDatabase()
   }
 
+
+  test("INSERT INTO PARTITIONED HIVE TABLE FROM SPARK TABLE") {
+    _spark
+      .sqlContext
+      .setConf("spark.hadoop.hive.exec.dynamic.partition.mode", "nonstrict")
+    _spark
+      .sqlContext
+      .setConf("spark.sql.sources.partitionOverwriteMode", "dynamic")
+
+    val qe = _spark.sql(s"""INSERT OVERWRITE TABLE ${destinationHiveTblName}_part
+                            |PARTITION(dt='20191101')
+                            |SELECT * FROM $sourceSparkTblName""".stripMargin)
+      .queryExecution
+    val qd = QueryDetail(qe, 0L)
+
+    assert(qe.sparkPlan.isInstanceOf[DataWritingCommandExec])
+    val node = qe.sparkPlan.asInstanceOf[DataWritingCommandExec]
+    assert(node.cmd.isInstanceOf[InsertIntoHiveTable])
+    val cmd = node.cmd.asInstanceOf[InsertIntoHiveTable]
+
+    val entities = CommandsHarvester.InsertIntoHiveTableHarvester.harvest(cmd, qd)
+    validateProcessEntity(entities.head, _ => {}, inputs => {
+      inputs.size should be (1)
+    //  assertTable(inputs.head, sourceSparkTblName)
+    }, outputs => {
+      outputs.size should be (1)
+      //assertTable(outputs.head, destinationHiveTblName)
+    })
+  }
+
+
+
   test("INSERT INTO HIVE TABLE FROM HIVE TABLE") {
+
+
     val qe = _spark.sql(s"INSERT INTO TABLE $destinationHiveTblName " +
       s"SELECT * FROM $sourceHiveTblName").queryExecution
     val qd = QueryDetail(qe, 0L)
@@ -307,4 +348,25 @@ class InsertIntoHarvesterWithRemoteHMSSuite
   override protected def getDbName: String = dbName
 
   override protected def expectSparkTableModels: Boolean = false
+}
+
+
+class InsertIntoHarvesterPartition  extends BaseInsertIntoHarvesterSuite with WithHiveSupport {
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    initializeTestEnvironment()
+  }
+
+  override def afterAll(): Unit = {
+    cleanupTestEnvironment()
+    super.afterAll()
+  }
+
+  override protected def getSparkSession: SparkSession = sparkSession
+
+  override protected def getDbName: String = "sac"
+
+  override protected def expectSparkTableModels: Boolean = false
+
 }

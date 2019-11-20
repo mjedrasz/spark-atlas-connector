@@ -106,3 +106,4 @@ class InsertIntoHiveDirHarvesterWithRemoteHMSSuite
 
   override protected def expectSparkTableModels: Boolean = false
 }
+

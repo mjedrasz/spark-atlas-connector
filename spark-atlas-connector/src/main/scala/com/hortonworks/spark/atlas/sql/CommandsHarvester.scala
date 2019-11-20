@@ -53,7 +53,16 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       val inputEntities = discoverInputsEntities(node.query, qd.qe.executedPlan)
 
       // new table entity
-      val outputEntities = Seq(tableToEntity(node.table))
+
+      val outputEntities = {
+        if (node.partition.isEmpty)
+          Seq(tableToEntity(node.table))
+        else {
+          val partKey = node.partition.head._1 //FIXME: Generalize for  multi-level  partitioning
+          val partVal = node.partition.head._2.getOrElse("N/A")
+          Seq(partitionToEntity(node.table,None,partKey,partVal))
+        }
+      }
 
       makeProcessEntities(inputEntities, outputEntities, qd)
     }
