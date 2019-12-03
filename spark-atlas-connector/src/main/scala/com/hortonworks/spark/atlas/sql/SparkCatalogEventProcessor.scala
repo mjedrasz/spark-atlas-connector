@@ -33,10 +33,37 @@ class SparkCatalogEventProcessor(
   private val cachedObject = new mutable.WeakHashMap[String, Object]
 
   override protected def process(e: ExternalCatalogEvent): Unit = {
-    if (SparkUtils.usingRemoteMetastoreService()) {
+    logger.warn("#######Handling events outer")
+    if (SparkUtils.usingRemoteMetastoreService() || e.isInstanceOf[AlterTableEvent]) {
+
+      logger.warn("#######Handling events")
+      e match {
+        case AlterTableEvent(db, table, kind) =>
+          val tableDefinition = SparkUtils.getExternalCatalog().getTable(db, table)
+          kind match {
+            case "table" =>
+              val tableEntity = sparkTableToEntityForAlterTable(tableDefinition)
+              atlasClient.createEntitiesWithDependencies(tableEntity)
+              logger.warn(s"######Updated table entity $table without columns")
+
+            case "dataSchema" =>
+              // We don't mind updating column
+              logger.warn("####Detected updating of table schema but ignored: " +
+                "column update will not be tracked here")
+
+            case "stats" =>
+              logger.warn(s"######Stats update will not be tracked here")
+
+            case _ =>
+              logger.warn("#########Different event")
+          }
+        case _ => logInfo()
+      }
       // SAC will not handle any DDL events when remote HMS is used:
       // Hive hook will take care of all DDL events in Hive Metastore Service.
       // No-op here.
+
+
       return
     }
 
@@ -115,25 +142,25 @@ class SparkCatalogEventProcessor(
         atlasClient.createEntitiesWithDependencies(dbEntity)
         logDebug(s"Updated DB properties")
 
-      case AlterTableEvent(db, table, kind) =>
-        val tableDefinition = SparkUtils.getExternalCatalog().getTable(db, table)
-        kind match {
-          case "table" =>
-            val tableEntity = sparkTableToEntityForAlterTable(tableDefinition)
-            atlasClient.createEntitiesWithDependencies(tableEntity)
-            logDebug(s"Updated table entity $table without columns")
-
-          case "dataSchema" =>
-            // We don't mind updating column
-            logDebug("Detected updating of table schema but ignored: " +
-              "column update will not be tracked here")
-
-          case "stats" =>
-            logDebug(s"Stats update will not be tracked here")
-
-          case _ =>
-          // No op.
-        }
+//      case AlterTableEvent(db, table, kind) =>
+//        val tableDefinition = SparkUtils.getExternalCatalog().getTable(db, table)
+//        kind match {
+//          case "table" =>
+//            val tableEntity = sparkTableToEntityForAlterTable(tableDefinition)
+//            atlasClient.createEntitiesWithDependencies(tableEntity)
+//            logDebug(s"Updated table entity $table without columns")
+//
+//          case "dataSchema" =>
+//            // We don't mind updating column
+//            logDebug("Detected updating of table schema but ignored: " +
+//              "column update will not be tracked here")
+//
+//          case "stats" =>
+//            logDebug(s"Stats update will not be tracked here")
+//
+//          case _ =>
+//          // No op.
+//        }
 
       case f =>
         logDebug(s"Drop unknown event $f")

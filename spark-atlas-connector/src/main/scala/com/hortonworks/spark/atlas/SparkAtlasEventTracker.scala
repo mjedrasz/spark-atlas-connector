@@ -60,10 +60,10 @@ class SparkAtlasEventTracker(atlasClient: AtlasClient, atlasClientConf: AtlasCli
 
     // We only care about SQL related events.
     event match {
-      case e: ExternalCatalogEvent => catalogEventTracker.pushEvent(e)
+      case e: ExternalCatalogEvent => { logger.info("Pushing ExternalCatalogEvent  to queue"); catalogEventTracker.pushEvent(e)}
       case e: SparkListenerEvent if e.getClass.getName.contains("org.apache.spark.ml") =>
         mlEventTracker.pushEvent(e)
-      case _ => // Ignore other events
+      case _ => logger.info(s"####Other event hit ${event.getClass.toString}")
     }
   }
 

@@ -70,6 +70,7 @@ trait AtlasEntityUtils extends Logging {
                      partitionKey: String,
                      partitionVal: String): SACAtlasReferenceable = {
     if (SparkUtils.usingRemoteMetastoreService()) {
+      logger.info(s"Running partitionToEntity with ${partitionKey}=${partitionVal}")
       external.hivePartitionToReference(tableDefinition,
         clusterName, Array(partitionVal))
     } else {

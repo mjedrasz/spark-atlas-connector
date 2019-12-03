@@ -50,6 +50,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
         node: InsertIntoHiveTable,
         qd: QueryDetail): Seq[SACAtlasReferenceable] = {
       // source tables entities
+      logger.info("####Using InsertIntoHiveTableHarvester")
       val inputEntities = discoverInputsEntities(node.query, qd.qe.executedPlan)
 
       // new table entity
@@ -59,10 +60,15 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
           Seq(tableToEntity(node.table))
         else {
           val partKey = node.partition.head._1 //FIXME: Generalize for  multi-level  partitioning
-          val partVal = node.partition.head._2.getOrElse("N/A")
+          val partVal = node.partition.head._2 match {
+            case Some(p) => p
+            case _ => "N/A"
+
+          }
           Seq(partitionToEntity(node.table,None,partKey,partVal))
         }
       }
+      logger.info(s"Adding output entities: ${outputEntities(0).qualifiedName}")
 
       makeProcessEntities(inputEntities, outputEntities, qd)
     }
@@ -72,12 +78,27 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
     override def harvest(
         node: InsertIntoHadoopFsRelationCommand,
         qd: QueryDetail): Seq[SACAtlasReferenceable] = {
+      logger.info("####Using InsertIntoHadoopFsRelationHarvester")
       // source tables/files entities
       val inputEntities = discoverInputsEntities(node.query, qd.qe.executedPlan)
 
       // new table/file entity
-      val outputEntities = Seq(node.catalogTable.map(tableToEntity(_)).getOrElse(
-        external.pathToEntity(node.outputPath.toUri.toString)))
+//      val outputEntities = Seq(node.catalogTable.map(tableToEntity(_)).getOrElse(
+//        external.pathToEntity(node.outputPath.toUri.toString)))
+
+      val outputEntities = {
+        if (node.staticPartitions.isEmpty)
+          Seq(node.catalogTable.map(tableToEntity(_)).getOrElse(
+              external.pathToEntity(node.outputPath.toUri.toString)))
+        else {
+          val partKey = node.staticPartitions.head._1 //FIXME: Generalize for  multi-level  partitioning
+          val partVal = node.staticPartitions.head._2
+          logger.info(s"Adding lineage information for ${partKey}=${partVal}")
+          Seq(partitionToEntity(node.catalogTable.head,None,partKey,partVal))
+        }
+      }
+      logger.info(s"Adding output entities: ${outputEntities(0).qualifiedName}")
+
 
       makeProcessEntities(inputEntities, outputEntities, qd)
     }
@@ -87,6 +108,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
     override def harvest(
         node: CreateHiveTableAsSelectCommand,
         qd: QueryDetail): Seq[SACAtlasReferenceable] = {
+      logger.info("####Using CreateHiveTableAsSelectHarvester")
       // source tables entities
       val inputEntities = discoverInputsEntities(node.query, qd.qe.executedPlan)
 
@@ -110,6 +132,8 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
     override def harvest(
         node: CreateDataSourceTableAsSelectCommand,
         qd: QueryDetail): Seq[SACAtlasReferenceable] = {
+      logger.info("####Using CreateDataSourceTableAsSelectHarvester")
+
       val inputEntities = discoverInputsEntities(node.query, qd.qe.executedPlan)
       val outputEntities = Seq(tableToEntity(node.table))
 
@@ -121,6 +145,8 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
     override def harvest(
         node: LoadDataCommand,
         qd: QueryDetail): Seq[SACAtlasReferenceable] = {
+      logger.info("####Using LoadDataHarvester")
+
       val inputEntities = Seq(external.pathToEntity(node.path))
       val outputEntities = Seq(prepareEntity(node.table))
 
@@ -132,6 +158,8 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
     override def harvest(
         node: InsertIntoHiveDirCommand,
         qd: QueryDetail): Seq[SACAtlasReferenceable] = {
+      logger.info("####Using InsertIntoHiveDirHarvester")
+
       if (node.storage.locationUri.isEmpty) {
         throw new IllegalStateException("Location URI is illegally empty")
       }
@@ -178,6 +206,8 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
     override def harvest(
         node: SaveIntoDataSourceCommand,
         qd: QueryDetail): Seq[SACAtlasReferenceable] = {
+      logger.info("####Using SaveIntoDataSourceHarvester")
+
       // source table entity
       val inputEntities = discoverInputsEntities(node.query, qd.qe.executedPlan)
       val outputEntities = node match {
@@ -197,6 +227,8 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
     override def harvest(
         node: WriteToDataSourceV2Exec,
         qd: QueryDetail): Seq[SACAtlasReferenceable] = {
+      logger.info("####Using WriteToDataSourceV2Harvester")
+
       val inputEntities = discoverInputsEntities(node.query, qd.qe.executedPlan)
 
       val outputEntities = node.writer match {
