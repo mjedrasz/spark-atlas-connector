@@ -17,6 +17,8 @@
 
 package com.hortonworks.spark.atlas.sql
 
+import java.util.concurrent.{CountDownLatch, TimeUnit}
+
 import scala.util.Random
 import org.scalatest.{FunSuite, Matchers}
 import org.apache.atlas.model.instance.AtlasEntity
@@ -52,8 +54,12 @@ class SparkExecutionPlanProcessorForViewSuite
   }
 
   test("CREATE TEMPORARY VIEW FROM TABLE, SAVE TEMP VIEW TO TABLE") {
+    val latch1 = new CountDownLatch(1)
+    testHelperQueryListener.countDownLatch(latch1)
     val planProcessor = new DirectProcessSparkExecutionPlanProcessor(atlasClient, atlasClientConf)
     sparkSession.sql(s"SELECT * FROM $sourceTblName").createOrReplaceTempView(destinationViewName)
+
+    latch1.await(300, TimeUnit.MILLISECONDS)
 
     var queryDetail = testHelperQueryListener.queryDetails.last
     planProcessor.process(queryDetail)
@@ -64,8 +70,11 @@ class SparkExecutionPlanProcessorForViewSuite
 
     // we don't want to check above queries, so reset the entities in listener
     testHelperQueryListener.clear()
-
+    val latch2 = new CountDownLatch(1)
+    testHelperQueryListener.countDownLatch(latch2)
     sparkSession.sql(s"SELECT * FROM $destinationViewName").write.saveAsTable(destinationTableName)
+
+    latch2.await(300, TimeUnit.MILLISECONDS)
 
     queryDetail = testHelperQueryListener.queryDetails.last
     planProcessor.process(queryDetail)

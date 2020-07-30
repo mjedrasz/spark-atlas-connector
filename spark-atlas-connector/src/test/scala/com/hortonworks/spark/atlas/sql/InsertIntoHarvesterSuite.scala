@@ -22,7 +22,7 @@ import org.apache.spark.sql.execution.datasources.InsertIntoHadoopFsRelationComm
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.UnionExec
 import org.apache.spark.sql.hive.execution.InsertIntoHiveTable
-import com.hortonworks.spark.atlas.{WithHiveSupport, WithRemoteHiveMetastoreServiceSupport}
+import com.hortonworks.spark.atlas.{SACAtlasReferenceable, WithHiveSupport, WithRemoteHiveMetastoreServiceSupport}
 import com.hortonworks.spark.atlas.sql.testhelper.{BaseHarvesterSuite, ProcessEntityValidator, TableEntityValidator}
 import org.apache.spark.sql.{SaveMode, SparkSession}
 
@@ -72,7 +72,7 @@ abstract class BaseInsertIntoHarvesterSuite
     _spark.sql(s"create table $outputTable2 (b int)")
     _spark.sql(s"create table $outputTable3 (c int)")
     _spark.sql(s"CREATE TABLE $bigTable (a int, b int, c int)")
-    _spark.sql(s"INSERT INTO $bigTable VALUES(100, '150', 200)")
+    _spark.sql(s"INSERT INTO $bigTable VALUES(100, 150, 200)")
   }
 
   override protected def cleanupTestEnvironment(): Unit = {
@@ -351,7 +351,7 @@ class InsertIntoHarvesterWithRemoteHMSSuite
 }
 
 
-class InsertIntoHarvesterPartition  extends BaseInsertIntoHarvesterSuite with WithHiveSupport {
+class InsertIntoHarvesterPartition  extends BaseInsertIntoHarvesterSuite with  WithRemoteHiveMetastoreServiceSupport {
 
   override def beforeAll(): Unit = {
     super.beforeAll()

@@ -20,6 +20,7 @@ package com.hortonworks.spark.atlas.sql
 import java.io.{BufferedWriter, File, FileWriter}
 import java.nio.file.{Files, Path}
 import java.util.Locale
+import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import com.hortonworks.spark.atlas.sql.testhelper._
 import com.hortonworks.spark.atlas.types.{external, metadata}
@@ -69,6 +70,8 @@ class SparkExecutionPlanProcessorForBatchQuerySuite
   }
 
   test("Read csv file and save as table") {
+    val latch = new CountDownLatch(2)
+    testHelperQueryListener.countDownLatch(latch)
     val planProcessor = new DirectProcessSparkExecutionPlanProcessor(atlasClient, atlasClientConf)
 
     val csvContent = Seq("a,1", "b,2", "c,3", "d,4").mkString("\n")
@@ -79,6 +82,8 @@ class SparkExecutionPlanProcessorForBatchQuerySuite
 
     val df = spark.read.csv(tempFile.toAbsolutePath.toString)
     df.write.saveAsTable(outputTableName)
+
+    latch.await(300, TimeUnit.MILLISECONDS)
 
     val queryDetail = testHelperQueryListener.queryDetails.last
     planProcessor.process(queryDetail)
@@ -118,6 +123,8 @@ class SparkExecutionPlanProcessorForBatchQuerySuite
   }
 
   test("Create external table against JSON files") {
+    val latch = new CountDownLatch(2)
+    testHelperQueryListener.countDownLatch(latch)
     val planProcessor = new DirectProcessSparkExecutionPlanProcessor(atlasClient, atlasClientConf)
 
     val tempDirPath = writeJsonFilesToTempDirectory()
@@ -126,6 +133,8 @@ class SparkExecutionPlanProcessorForBatchQuerySuite
     val rand = new scala.util.Random()
     val outputTableName = "test_json_" + rand.nextInt(1000000000)
     spark.sql(s"CREATE TABLE $outputTableName USING json location '$tempDirPathStr'")
+
+    latch.await(300, TimeUnit.MILLISECONDS)
 
     val queryDetail = testHelperQueryListener.queryDetails.last
     planProcessor.process(queryDetail)
@@ -149,6 +158,8 @@ class SparkExecutionPlanProcessorForBatchQuerySuite
   }
 
   test("Save Spark table to Kafka via df.save()") {
+    val latch = new CountDownLatch(3)
+    testHelperQueryListener.countDownLatch(latch)
     val planProcessor = new DirectProcessSparkExecutionPlanProcessor(atlasClient, atlasClientConf)
 
     val rand = new scala.util.Random()
@@ -176,6 +187,8 @@ class SparkExecutionPlanProcessorForBatchQuerySuite
       .option("kafka." + AtlasClientConf.CLUSTER_NAME.key, customClusterName)
       .save()
 
+    latch.await(300, TimeUnit.MILLISECONDS)
+
     val queryDetail = testHelperQueryListener.queryDetails.last
     planProcessor.process(queryDetail)
 
@@ -202,6 +215,8 @@ class SparkExecutionPlanProcessorForBatchQuerySuite
 
   test("Read Kafka topics with various options of subscription " +
     "and save to Spark table via df.saveAsTable()") {
+    val latch = new CountDownLatch(1)
+    testHelperQueryListener.countDownLatch(latch)
     val planProcessor = new DirectProcessSparkExecutionPlanProcessor(atlasClient, atlasClientConf)
 
     val rand = new scala.util.Random()
@@ -250,6 +265,8 @@ class SparkExecutionPlanProcessorForBatchQuerySuite
 
     df1.union(df2).union(df3).write.mode("append").saveAsTable(outputTableName)
 
+    latch.await(300, TimeUnit.MILLISECONDS)
+
     val queryDetail = testHelperQueryListener.queryDetails.last
     planProcessor.process(queryDetail)
 
@@ -275,6 +292,8 @@ class SparkExecutionPlanProcessorForBatchQuerySuite
   }
 
   test("Read Kafka topics and save to Kafka via df.save()") {
+    val latch = new CountDownLatch(1)
+    testHelperQueryListener.countDownLatch(latch)
     val planProcessor = new DirectProcessSparkExecutionPlanProcessor(atlasClient, atlasClientConf)
 
     val topicsToRead = Seq("sparkread1", "sparkread2", "sparkread3")
@@ -300,6 +319,8 @@ class SparkExecutionPlanProcessorForBatchQuerySuite
       .option("topic", topicToWrite)
       .option("kafka." + AtlasClientConf.CLUSTER_NAME.key, customClusterName)
       .save()
+
+    latch.await(300, TimeUnit.MILLISECONDS)
 
     val queryDetail = testHelperQueryListener.queryDetails.last
     planProcessor.process(queryDetail)

@@ -25,18 +25,15 @@ import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
 import org.apache.spark.Partition
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.connector.read.InputPartition
+import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.execution.{RDDScanExec, RowDataSourceScanExec}
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceRDDPartition, DataSourceV2ScanExec}
-import org.apache.spark.sql.execution.streaming.sources.MicroBatchWriter
-import org.apache.spark.sql.sources.v2.reader.InputPartition
-import org.apache.spark.sql.sources.v2.writer.DataWriterFactory
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceRDDPartition, MicroBatchScanExec}
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider}
 import org.apache.spark.sql.types.StructType
 import com.hortonworks.spark.atlas.AtlasClientConf
 import com.hortonworks.spark.atlas.sql.KafkaTopicInformation
 import com.hortonworks.spark.atlas.utils.{Logging, ReflectionHelper}
-import org.apache.spark.sql.sources.v2.DataSourceV2
 
 /**
  * An object that defines an method that extracts `KafkaTopicInformation` from data source plans
@@ -51,6 +48,7 @@ import org.apache.spark.sql.sources.v2.DataSourceV2
 object ExtractFromDataSource extends Logging {
   private val CLASS_NAME_KAFKA_STREAM_WRITER_FACTORY =
     "org.apache.spark.sql.kafka010.KafkaStreamWriterFactory"
+  private val CLASS_NAME_KAFKA_STREAMING_WRITE = "org.apache.spark.sql.kafka010.KafkaStreamingWrite"
   private val CLASS_NAME_KAFKA_SOURCE_RDD_PARTITION =
     "org.apache.spark.sql.kafka010.KafkaSourceRDDPartition"
   private val CLASS_NAME_KAFKA_OFFSET_RANGE = "org.apache.spark.sql.kafka010.KafkaOffsetRange"
@@ -59,18 +57,17 @@ object ExtractFromDataSource extends Logging {
   private val CLASS_NAME_KAFKA_RELATION = "org.apache.spark.sql.kafka010.KafkaRelation"
   private val CLASS_NAME_KAFKA_SOURCE_PROVIDER = "org.apache.spark.sql.kafka010.KafkaSourceProvider"
   private val CLASS_NAME_KAFKA_MICRO_BATCH_INPUT_PARTITION =
-    "org.apache.spark.sql.kafka010.KafkaMicroBatchInputPartition"
+    "org.apache.spark.sql.kafka010.KafkaBatchInputPartition"
   private val CLASS_NAME_KAFKA_CONTINUOUS_INPUT_PARTITION =
     "org.apache.spark.sql.kafka010.KafkaContinuousInputPartition"
 
-  def extractTopic(writer: MicroBatchWriter): Option[KafkaTopicInformation] = {
+  def extractTopic(writer: StreamingWrite): Option[KafkaTopicInformation] = {
     // Unfortunately neither KafkaStreamWriter is a case class nor topic is a field.
     // Hopefully KafkaStreamWriterFactory is a case class instead, so we can extract
     // topic information from there, as well as producer parameters.
     // The cost of createWriterFactory is tiny (case class object creation) for this case,
     // and we can find the way to cache it once we find the cost is not ignorable.
-    val writerFactory = writer.createWriterFactory()
-    populateValuesFromKafkaStreamWriterFactory(writerFactory) match {
+    populateValuesFromKafkaStreamWrite(writer) match {
       case Some((Some(tp), params, _)) =>
         Some(KafkaTopicInformation(tp, params.get(AtlasClientConf.CLUSTER_NAME.key)))
 
@@ -86,10 +83,10 @@ object ExtractFromDataSource extends Logging {
     extractSourceTopicsFromDataSourceV1(r.rdd)
   }
 
-  def extractSourceTopicsFromDataSourceV2(r: DataSourceV2ScanExec): Seq[KafkaTopicInformation] = {
+  def extractSourceTopicsFromDataSourceV2(r: MicroBatchScanExec): Seq[KafkaTopicInformation] = {
     val topics = new mutable.HashSet[KafkaTopicInformation]()
     r.inputRDDs().foreach(rdd => rdd.partitions.foreach {
-      case e: DataSourceRDDPartition[_] =>
+      case e: DataSourceRDDPartition =>
         if (isKafkaMicroBatchInputPartition(e.inputPartition)) {
           populateValuesFromKafkaMicroBatchInputPartition(e.inputPartition) match {
             case Some((topic, customClusterName)) =>
@@ -179,11 +176,6 @@ object ExtractFromDataSource extends Logging {
     kafkaClazz.isAssignableFrom(rel.getClass)
   }
 
-  def isKafkaRelationProvider(source: DataSourceV2): Boolean = {
-    val kafkaClazz = ReflectionHelper.classForName(CLASS_NAME_KAFKA_SOURCE_PROVIDER)
-    kafkaClazz.isAssignableFrom(source.getClass)
-  }
-
   def isKafkaRelationProvider(provider: CreatableRelationProvider): Boolean = {
     val kafkaClazz = ReflectionHelper.classForName(CLASS_NAME_KAFKA_SOURCE_PROVIDER)
     kafkaClazz.isAssignableFrom(provider.getClass)
@@ -194,8 +186,12 @@ object ExtractFromDataSource extends Logging {
     kafkaClazz.isAssignableFrom(rdd.getClass)
   }
 
-  private def isKafkaStreamWriterFactory(writer: DataWriterFactory[InternalRow]): Boolean = {
+  private def isKafkaStreamWriterFactory(writer: StreamingDataWriterFactory): Boolean = {
     belongToTargetClass(CLASS_NAME_KAFKA_STREAM_WRITER_FACTORY, writer)
+  }
+
+  private def isKafkaStreamingWrite(writer: StreamingWrite): Boolean = {
+    belongToTargetClass(CLASS_NAME_KAFKA_STREAMING_WRITE, writer)
   }
 
   private def isKafkaSourceRddPartition(p: Partition): Boolean = {
@@ -210,11 +206,11 @@ object ExtractFromDataSource extends Logging {
     belongToTargetClass(CLASS_NAME_TOPIC_PARTITION, topicPartition)
   }
 
-  private def isKafkaMicroBatchInputPartition(p: InputPartition[_]): Boolean = {
+  private def isKafkaMicroBatchInputPartition(p: InputPartition): Boolean = {
     belongToTargetClass(CLASS_NAME_KAFKA_MICRO_BATCH_INPUT_PARTITION, p)
   }
 
-  private def isKafkaContinuousInputPartition(p: InputPartition[_]): Boolean = {
+  private def isKafkaContinuousInputPartition(p: InputPartition): Boolean = {
     belongToTargetClass(CLASS_NAME_KAFKA_CONTINUOUS_INPUT_PARTITION, p)
   }
 
@@ -229,8 +225,36 @@ object ExtractFromDataSource extends Logging {
     }
   }
 
+  private def populateValuesFromKafkaStreamWrite(writer: StreamingWrite)
+    : Option[(Option[String], Map[String, String], StructType)] = {
+    import scala.collection.JavaConverters._
+
+    if (isKafkaStreamingWrite(writer)) {
+      val topic = ReflectionHelper.reflectFieldWithContextClassloader[Option[String]](
+        writer, "topic")
+      val params = ReflectionHelper
+        .reflectFieldWithContextClassloaderLoosenType(writer, "producerParams")
+        .flatMap {
+          // SPARK-25501
+          case p: util.Map[String, Object] =>
+            Some(p.asScala.map(elem => elem._1 -> elem._2.toString).toMap)
+          // Before SPARK-25501
+          case p: Map[String, String] => Some(p)
+          case _ => None
+        }
+      val schema = ReflectionHelper.reflectFieldWithContextClassloader[StructType](writer, "schema")
+
+      (topic, params, schema) match {
+        case (Some(Some(t)), Some(p), Some(s)) => Some((Some(t), p, s))
+        case _ => None
+      }
+    } else {
+      None
+    }
+  }
+
   private def populateValuesFromKafkaStreamWriterFactory(
-      writer: DataWriterFactory[InternalRow])
+      writer: StreamingDataWriterFactory)
     : Option[(Option[String], Map[String, String], StructType)] = {
     import scala.collection.JavaConverters._
 
@@ -306,7 +330,7 @@ object ExtractFromDataSource extends Logging {
   }
 
   private def populateValuesFromKafkaMicroBatchInputPartition(
-      p: InputPartition[_]): Option[(String, Option[String])] = {
+      p: InputPartition): Option[(String, Option[String])] = {
     if (isKafkaMicroBatchInputPartition(p)) {
       val topic = ReflectionHelper.reflectFieldWithContextClassloaderLoosenType(
         p, "offsetRange") match {
@@ -332,7 +356,7 @@ object ExtractFromDataSource extends Logging {
   }
 
   private def populateValuesFromKafkaContinuousInputPartition(
-      p: InputPartition[_]): Option[(String, Option[String])] = {
+      p: InputPartition): Option[(String, Option[String])] = {
     if (isKafkaContinuousInputPartition(p)) {
       val topic = ReflectionHelper.reflectFieldWithContextClassloaderLoosenType(
         p, "topicPartition") match {

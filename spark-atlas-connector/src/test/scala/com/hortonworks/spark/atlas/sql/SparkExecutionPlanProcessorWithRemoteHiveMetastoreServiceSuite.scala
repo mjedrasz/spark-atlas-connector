@@ -19,6 +19,7 @@ package com.hortonworks.spark.atlas.sql
 
 import java.io.{File, FileOutputStream, PrintWriter}
 import java.nio.file.Files
+import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import com.hortonworks.spark.atlas._
 import com.hortonworks.spark.atlas.sql.testhelper._
@@ -73,6 +74,8 @@ class SparkExecutionPlanProcessorWithRemoteHiveMetastoreServiceSuite
   }
 
   test("CREATE EXTERNAL TABLE ... LOCATION ...") {
+    val latch = new CountDownLatch(1)
+    testHelperQueryListener.countDownLatch(latch)
     val planProcessor = new DirectProcessSparkExecutionPlanProcessor(atlasClient, atlasClientConf)
     val tempDir = Files.createTempDirectory("spark-atlas-connector-temp")
 
@@ -82,6 +85,8 @@ class SparkExecutionPlanProcessorWithRemoteHiveMetastoreServiceSuite
     sparkSession.sql(s"CREATE EXTERNAL TABLE IF NOT EXISTS $dbName.$outputTableName " +
       "(name STRING, age INT, emp_id INT, designation STRING) " +
       s"LOCATION '$tempDir'")
+
+    latch.await(300, TimeUnit.MILLISECONDS)
 
     val queryDetail = testHelperQueryListener.queryDetails.last
     planProcessor.process(queryDetail)
@@ -98,6 +103,8 @@ class SparkExecutionPlanProcessorWithRemoteHiveMetastoreServiceSuite
 
   // borrowed from LoadDataHarvesterSuite
   test("LOAD DATA [LOCAL] INPATH path source") {
+    val latch = new CountDownLatch(1)
+    testHelperQueryListener.countDownLatch(latch)
     val file = Files.createTempFile("input", ".txt").toFile
     val out = new PrintWriter(new FileOutputStream(file))
     out.write("a\nb\nc\nd\n")
@@ -107,6 +114,8 @@ class SparkExecutionPlanProcessorWithRemoteHiveMetastoreServiceSuite
 
     sparkSession.sql(s"LOAD DATA LOCAL INPATH '${file.getAbsolutePath}' " +
       s"OVERWRITE INTO TABLE $dbName.$sourceTblName").queryExecution
+
+    latch.await(300, TimeUnit.MILLISECONDS)
 
     val queryDetail = testHelperQueryListener.queryDetails.last
     planProcessor.process(queryDetail)
@@ -125,10 +134,14 @@ class SparkExecutionPlanProcessorWithRemoteHiveMetastoreServiceSuite
 
   // borrowed from InsertIntoHiveDirHarvesterSuite
   test("INSERT OVERWRITE DIRECTORY path...") {
+    val latch = new CountDownLatch(1)
+    testHelperQueryListener.countDownLatch(latch)
     val planProcessor = new DirectProcessSparkExecutionPlanProcessor(atlasClient, atlasClientConf)
 
     sparkSession.sql(s"INSERT OVERWRITE DIRECTORY 'target/dir1' " +
       s"SELECT * FROM $dbName.$sourceTblName").queryExecution
+
+    latch.await(300, TimeUnit.MILLISECONDS)
 
     val queryDetail = testHelperQueryListener.queryDetails.last
     planProcessor.process(queryDetail)

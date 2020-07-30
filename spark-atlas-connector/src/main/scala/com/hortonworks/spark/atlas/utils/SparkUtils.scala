@@ -27,7 +27,6 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, ExternalCatalog}
 import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2
 
 object SparkUtils extends Logging {
   private var _hiveConf: Configuration = _
@@ -60,9 +59,8 @@ object SparkUtils extends Logging {
     session.get
   }
 
-  def isHiveEnabled(): Boolean = {
+  def isHiveEnabled(): Boolean =
     sparkSession.sparkContext.getConf.get("spark.sql.catalogImplementation", "in-memory") == "hive"
-  }
 
   def usingRemoteMetastoreService(mockHiveConf: Option[Configuration] = None): Boolean = {
     val conf = mockHiveConf.getOrElse(hiveConf)
@@ -138,9 +136,8 @@ object SparkUtils extends Logging {
    * https://github.com/apache/spark/blob/0a4c03f7d084f1d2aa48673b99f3b9496893ce8d/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/catalog/SessionCatalog.scala#L294-L295
    */
   // scalastyle:on
-  def getDatabaseName(tableDefinition: CatalogTable): String = {
+  def getDatabaseName(tableDefinition: CatalogTable): String =
     getDatabaseName(tableDefinition.identifier)
-  }
 
   // scalastyle:off
   /**
@@ -148,9 +145,8 @@ object SparkUtils extends Logging {
    * https://github.com/apache/spark/blob/0a4c03f7d084f1d2aa48673b99f3b9496893ce8d/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/catalog/SessionCatalog.scala#L294-L295
    */
   // scalastyle:on
-  def getTableName(tableDefinition: CatalogTable): String = {
+  def getTableName(tableDefinition: CatalogTable): String =
     getTableName(tableDefinition.identifier)
-  }
 
   // scalastyle:off
   /**
@@ -158,9 +154,8 @@ object SparkUtils extends Logging {
    * https://github.com/apache/spark/blob/0a4c03f7d084f1d2aa48673b99f3b9496893ce8d/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/catalog/SessionCatalog.scala#L294-L295
    */
   // scalastyle:on
-  def getDatabaseName(identifier: TableIdentifier): String = {
+  def getDatabaseName(identifier: TableIdentifier): String =
     formatDatabaseName(identifier.database.getOrElse(getCurrentDatabase))
-  }
 
   // scalastyle:off
   /**
@@ -168,57 +163,27 @@ object SparkUtils extends Logging {
    * https://github.com/apache/spark/blob/0a4c03f7d084f1d2aa48673b99f3b9496893ce8d/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/catalog/SessionCatalog.scala#L294-L295
    */
   // scalastyle:on
-  def getTableName(identifier: TableIdentifier): String = {
-    formatTableName(identifier.table)
-  }
+  def getTableName(identifier: TableIdentifier): String = formatTableName(identifier.table)
 
   /**
    * Get the catalog table of current external catalog if exists; otherwise, it returns
    * the input catalog table as is.
    */
-  def getCatalogTableIfExistent(tableDefinition: CatalogTable): CatalogTable = {
+  def getCatalogTableIfExistent(tableDefinition: CatalogTable): CatalogTable =
     try {
       SparkUtils.getExternalCatalog().getTable(
         getDatabaseName(tableDefinition),
         getTableName(tableDefinition))
     } catch {
-      case e: Throwable =>
+      case _: Throwable =>
         tableDefinition
     }
-  }
 
   // Get the user name of current context.
-  def currUser(): String = {
-    UserGroupInformation.getCurrentUser.getUserName
-  }
+  def currUser(): String = UserGroupInformation.getCurrentUser.getUserName
 
-  def ugi(): UserGroupInformation =
-  {
-    UserGroupInformation.getCurrentUser
-  }
+  def ugi(): UserGroupInformation = UserGroupInformation.getCurrentUser
 
-  // Get session user name, this is only available for Spark ThriftServer scenario, we should
-  // figure out a proper session user name based on connected beeline.
-  //
-  // Note. This is a hacky way, we cannot guarantee the consistency between Spark versions.
-  def currSessionUser(qe: QueryExecution): String = {
-    val thriftServerListener = Option(HiveThriftServer2.listener)
+  def currSessionUser(qe: QueryExecution): String = qe.sparkSession.sparkContext.sparkUser
 
-    thriftServerListener match {
-      case Some(listener) =>
-        val qeString = qe.toString()
-        // Based on the QueryExecution to find out the session id. This is quite cost, but
-        // currently it is the way to correlate query plan to session.
-        val sessId = listener.getExecutionList.reverseIterator
-          .find(_.executePlan == qeString)
-          .map(_.sessionId)
-        sessId.flatMap { id =>
-          listener.getSessionList.reverseIterator.find(_.sessionId == id)
-        }
-          .map(_.userName)
-          .getOrElse(currUser())
-
-      case None => currUser()
-    }
-  }
 }

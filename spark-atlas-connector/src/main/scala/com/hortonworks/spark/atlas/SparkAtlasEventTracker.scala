@@ -17,7 +17,6 @@
 
 package com.hortonworks.spark.atlas
 
-import com.google.common.annotations.VisibleForTesting
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogEvent
 import org.apache.spark.sql.execution.QueryExecution
@@ -40,7 +39,6 @@ class SparkAtlasEventTracker(atlasClient: AtlasClient, atlasClientConf: AtlasCli
   private val enabled: Boolean = AtlasUtils.isSacEnabled(atlasClientConf)
 
   // Processor to handle DDL related events
-  @VisibleForTesting
   private[atlas] val catalogEventTracker =
     new SparkCatalogEventProcessor(atlasClient, atlasClientConf)
   catalogEventTracker.startThread()

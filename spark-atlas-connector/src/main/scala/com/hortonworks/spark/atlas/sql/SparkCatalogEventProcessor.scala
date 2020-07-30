@@ -142,26 +142,6 @@ class SparkCatalogEventProcessor(
         atlasClient.createEntitiesWithDependencies(dbEntity)
         logDebug(s"Updated DB properties")
 
-//      case AlterTableEvent(db, table, kind) =>
-//        val tableDefinition = SparkUtils.getExternalCatalog().getTable(db, table)
-//        kind match {
-//          case "table" =>
-//            val tableEntity = sparkTableToEntityForAlterTable(tableDefinition)
-//            atlasClient.createEntitiesWithDependencies(tableEntity)
-//            logDebug(s"Updated table entity $table without columns")
-//
-//          case "dataSchema" =>
-//            // We don't mind updating column
-//            logDebug("Detected updating of table schema but ignored: " +
-//              "column update will not be tracked here")
-//
-//          case "stats" =>
-//            logDebug(s"Stats update will not be tracked here")
-//
-//          case _ =>
-//          // No op.
-//        }
-
       case f =>
         logDebug(s"Drop unknown event $f")
     }

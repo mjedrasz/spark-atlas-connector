@@ -21,7 +21,6 @@ import java.util.concurrent.{LinkedBlockingQueue, TimeUnit}
 
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
-import com.google.common.annotations.VisibleForTesting
 import com.hortonworks.spark.atlas.utils.Logging
 
 abstract class AbstractEventProcessor[T: ClassTag] extends Logging {
@@ -63,7 +62,6 @@ abstract class AbstractEventProcessor[T: ClassTag] extends Logging {
 
   protected def process(e: T): Unit
 
-  @VisibleForTesting
   private[atlas] def eventProcess(): Unit = {
     var stopped = false
     while (!stopped) {

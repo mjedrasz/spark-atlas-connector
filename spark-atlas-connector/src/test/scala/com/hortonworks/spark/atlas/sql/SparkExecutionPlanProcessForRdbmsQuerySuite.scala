@@ -19,6 +19,7 @@ package com.hortonworks.spark.atlas.sql
 
 import org.scalatest.{BeforeAndAfter, FunSuite, Matchers}
 import java.sql.DriverManager
+import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import com.hortonworks.spark.atlas.{AtlasClientConf, AtlasUtils, WithHiveSupport}
 import com.hortonworks.spark.atlas.AtlasEntityReadHelper._
@@ -62,6 +63,8 @@ class SparkExecutionPlanProcessForRdbmsQuerySuite
   }
 
   test("read from derby table and insert into a different derby table") {
+    val latch = new CountDownLatch(1)
+    testHelperQueryListener.countDownLatch(latch)
     val planProcessor = new DirectProcessSparkExecutionPlanProcessor(atlasClient, atlasClientConf)
 
     val jdbcProperties = new java.util.Properties
@@ -70,6 +73,8 @@ class SparkExecutionPlanProcessForRdbmsQuerySuite
 
     val readDataFrame = sparkSession.read.jdbc(url, sourceTableName, jdbcProperties)
     readDataFrame.write.mode("append").jdbc(url, sinkTableName, jdbcProperties)
+
+    latch.await(300, TimeUnit.MILLISECONDS)
 
     val queryDetail = testHelperQueryListener.queryDetails.last
     planProcessor.process(queryDetail)

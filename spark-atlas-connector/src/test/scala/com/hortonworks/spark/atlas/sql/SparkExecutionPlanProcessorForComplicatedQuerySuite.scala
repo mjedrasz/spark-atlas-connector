@@ -18,6 +18,7 @@
 package com.hortonworks.spark.atlas.sql
 
 import java.io.File
+import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import com.hortonworks.spark.atlas.{AtlasClientConf, AtlasUtils, WithRemoteHiveMetastoreServiceSupport}
 import com.hortonworks.spark.atlas.sql.testhelper._
@@ -55,6 +56,8 @@ class SparkExecutionPlanProcessorForComplicatedQuerySuite
 
   test("select tbl1, tbl2 -> save to tbl3 -> select tbl3 -> save to file") {
     val atlasClient = new CreateEntitiesTrackingAtlasClient()
+    val latch1 = new CountDownLatch(3)
+    testHelperQueryListener.countDownLatch(latch1)
     val planProcessor = new DirectProcessSparkExecutionPlanProcessor(atlasClient, atlasClientConf)
 
     val rand = new scala.util.Random()
@@ -75,7 +78,10 @@ class SparkExecutionPlanProcessorForComplicatedQuerySuite
       .write
       .saveAsTable(s"${dbName}.${table3}")
 
+    latch1.await(300, TimeUnit.MILLISECONDS)
+
     val queryDetail = testHelperQueryListener.queryDetails.last
+
     planProcessor.process(queryDetail)
     val entities = atlasClient.createdEntities
 
@@ -96,12 +102,16 @@ class SparkExecutionPlanProcessorForComplicatedQuerySuite
 
     testHelperQueryListener.clear()
     atlasClient.clearEntities()
+    val latch2 = new CountDownLatch(1)
+    testHelperQueryListener.countDownLatch(latch2)
 
     sparkSession
       .sql(s"select * from ${dbName}.${table3}")
       .write
       .mode("append")
       .save(outputPath)
+
+    latch2.await(300, TimeUnit.MILLISECONDS)
 
     val queryDetail2 = testHelperQueryListener.queryDetails.last
     planProcessor.process(queryDetail2)

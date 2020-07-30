@@ -55,6 +55,7 @@ trait WithHiveSupport extends BeforeAndAfterAll { self: Suite =>
       .enableHiveSupport()
       .config("spark.ui.enabled", "false")
       .config("spark.sql.warehouse.dir", warehouseDir)
+      .config("spark.default.parallelism", "1")
       .getOrCreate()
   }
 

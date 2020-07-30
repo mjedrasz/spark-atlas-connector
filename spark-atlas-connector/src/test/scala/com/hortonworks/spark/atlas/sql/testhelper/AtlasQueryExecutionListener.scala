@@ -17,6 +17,8 @@
 
 package com.hortonworks.spark.atlas.sql.testhelper
 
+import java.util.concurrent.CountDownLatch
+
 import com.hortonworks.spark.atlas.sql.QueryDetail
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.util.QueryExecutionListener
@@ -25,6 +27,11 @@ import scala.collection.mutable
 
 class AtlasQueryExecutionListener extends QueryExecutionListener {
   val queryDetails = new mutable.MutableList[QueryDetail]()
+  var latch:CountDownLatch = new CountDownLatch(1)
+
+  def countDownLatch(latch: CountDownLatch): Unit = {
+    this.latch = latch
+  }
 
   override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
     if (qe.logical.isStreaming) {
@@ -32,6 +39,7 @@ class AtlasQueryExecutionListener extends QueryExecutionListener {
       return
     }
     queryDetails += QueryDetail.fromQueryExecutionListener(qe, durationNs)
+    latch.countDown()
   }
 
   override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {
